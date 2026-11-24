@@ -64,3 +64,32 @@
 ### Next Steps
 - **Daemonization**: Turn the wrapper into a background service that runs silently on system startup.
 - **Crash Recovery**: Automatically detect if the previous session crashed (by checking if the log file ended abruptly) and offer a replay.
+
+## Session 3: Daemonization & Background Services
+**Date:** November 24, 2026
+
+### Goals for Today
+- Turn the terminal wrapper into a silent Windows Service (Daemon).
+- Verify that the background service can record telemetry without a visible console.
+
+### What We Built / Upgraded
+1. **NSSM Integration (Non-Sucking Service Manager)**:
+   - Downloaded and configured NSSM to wrap the virtual environment's Python executable.
+   - Installed `TerminalBlackBox` as a native Windows Service pointing to `blackbox/pty_shell.py`.
+2. **Background Execution**:
+   - Started the service via `Start-Service TerminalBlackBox`. 
+   - Verified that the service ran silently in the background (Session 0) without any visible terminal window.
+3. **Graceful Shutdown**:
+   - Stopped the service via `Stop-Service`.
+   - Verified that NSSM successfully sent a `Ctrl+C` signal to the Python script, triggering the `finally` block to flush the buffer and save the `.jsonl` log file.
+4. **Virtual Screen Snapshot Verification**:
+   - Inspected the generated log file. Confirmed that the `pyte` virtual screen successfully captured the hidden background prompt state and saved it as a `{"type": "screen"}` JSON object.
+
+### Challenges & Learnings
+- **The Invisible Shell**: Realized that a daemonized PTY runs completely hidden, meaning it cannot currently accept user input. To interact with the daemon, we must transition the architecture from a monolithic script to a **Client-Server model**.
+- **Session 0 Isolation**: Learned that Windows Services run in Session 0 and cannot interact with the desktop, reinforcing the need for a separate client application to send commands over a local socket.
+
+### Next Steps
+- **Phase 3 (Client-Server Architecture)**: 
+  - Refactor `pty_shell.py` into `server.py` (handles PTY and listens on a local TCP port) and `client.py` (connects to the port, sends keystrokes, and renders output).
+  - Restructure the project folder for better modularity (`main.py`, `blackbox/server.py`, `blackbox/client.py`).
