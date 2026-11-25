@@ -93,3 +93,37 @@
 - **Phase 3 (Client-Server Architecture)**: 
   - Refactor `pty_shell.py` into `server.py` (handles PTY and listens on a local TCP port) and `client.py` (connects to the port, sends keystrokes, and renders output).
   - Restructure the project folder for better modularity (`main.py`, `blackbox/server.py`, `blackbox/client.py`).
+
+  ## Session 4: Client-Server Architecture (WIP)
+**Date:** November 25, 2026
+
+### Goals for Today
+- Refactor the monolithic wrapper into a Client-Server model.
+- Decouple the logger from the PTY.
+- Implement a secure socket connection with token authentication.
+
+### What We Built / Upgraded
+1. **Custom Network Protocol (`protocol.py`)**:
+   - Implemented a length-prefixed JSON framing protocol over TCP to prevent packet fragmentation. Each message is prepended with a 4-byte header defining its length.
+2. **The Daemon Server (`server.py`)**:
+   - Generates a random security token (`secret.txt`) on startup to prevent unauthorized local access.
+   - Listens on `127.0.0.1:9999` for incoming client connections.
+   - Spawns the hidden PTY only after successful authentication.
+3. **The Client (`client.py`)**:
+   - Connects to the server, reads the `secret.txt` token, and authenticates.
+   - Bridges the local keyboard (`msvcrt`) to the server via the socket protocol.
+   - Receives output from the server and prints it to the local screen.
+4. **Architecture Refactor**:
+   - Moved the `BlackBox` logging logic into `recorder.py`.
+   - Created a `main.py` entry point to route commands (`python main.py server` vs `python main.py client`).
+
+### Challenges & Learnings
+- **The PTY Socket Hang**: Encountered a blocking issue where `pywinpty` hangs when detached from a visible console window and routed through a background socket thread. The C-extension seems to require a specific buffer flush or terminal size handshake before yielding output.
+- **Solution Pending**: Will investigate `pywinpty` threading behaviors, potentially by sending an initial dummy keystroke (`\r`) or resizing the window to force the PTY to flush its buffer.
+
+### Next Steps
+- Fix the PTY socket hang.
+- Implement window resize propagation over the socket protocol.
+- Re-test the end-to-end keystroke routing.
+
+
