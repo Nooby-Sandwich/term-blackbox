@@ -118,12 +118,7 @@
    - Created a `main.py` entry point to route commands (`python main.py server` vs `python main.py client`).
 
 ### Challenges & Learnings
-- **The PTY Socket Hang**: Encountered a blocking issue where `pywinpty` hangs when detached from a visible console window and routed through a background socket thread. The C-extension seems to require a specific buffer flush or terminal size handshake before yielding output.
-- **Solution Pending**: Will investigate `pywinpty` threading behaviors, potentially by sending an initial dummy keystroke (`\r`) or resizing the window to force the PTY to flush its buffer.
-
-### Next Steps
-- Fix the PTY socket hang.
-- Implement window resize propagation over the socket protocol.
-- Re-test the end-to-end keystroke routing.
-
-
+- **The Indentation Bug**: The server appeared to "hang" on startup. We originally thought it was a `pywinpty` ConPTY quirk. Claude correctly identified a Python indentation bug: the thread execution and the receive loop were accidentally indented *inside* the nested `pty_to_socket` function definition, meaning they were never executed.
+- **The Single PTY Architecture**: Refactored the server to spawn the PTY only *once* at startup. Clients attach and detach dynamically. The server maintains the `pyte` virtual screen in memory, so when a client reconnects, the server repaints the current screen state immediately.
+- **Concurrency & Framing**: Implemented a `ClientSlot` class with a `threading.Lock` to ensure that the PTY reader thread and the client message loop don't interleave socket writes and corrupt the length-prefixed JSON protocol.
+- **Seamless Reattachment**: The client now sends a resize event on connection. The server uses this as a trigger to repaint the `pyte` screen buffer, meaning the prompt appears instantly without waiting for new output.
