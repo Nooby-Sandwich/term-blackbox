@@ -1,2 +1,9 @@
-pywinpty>=2.0.0
-pyte>=0.8.0
+colorama==0.4.6
+iniconfig==2.3.1
+packaging==26.4
+pluggy==1.7.0
+Pygments==2.21.0
+pyte==0.8.2
+pytest==9.2.0
+pywinpty==3.1.2
+wcwidth==0.9.5

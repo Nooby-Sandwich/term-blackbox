@@ -2,7 +2,7 @@
 
 A crash-resilient terminal flight recorder for Windows. A background daemon owns a hidden PowerShell session, records everything it prints, and lets you **detach and reattach** from any terminal, much like `tmux`. If your terminal or machine dies, the last stretch of the session is already on disk.
 
-- Runs at logon via Task Scheduler. No console window, no admin rights needed at runtime.
+- Runs at logon via Task Scheduler. No console window or admin rights are needed at runtime.
 - Keeps recording while no client is attached.
 - Stores raw output **and** a clean text snapshot of the screen.
 - Replays a session after a crash.
@@ -34,19 +34,19 @@ A crash-resilient terminal flight recorder for Windows. A background daemon owns
                                                logs/blackbox_<time>.jsonl
 ```
 
-**Server (`blackbox/server.py`)**: spawns PowerShell once, at startup, and reads it from a single pump thread for the lifetime of the daemon. Every chunk goes to the recorder. If a client is attached, the chunk is also forwarded to it.
+**Server ([`blackbox/server.py`](blackbox/server.py)):** Spawns PowerShell once at startup and reads it from a single pump thread for the lifetime of the daemon. Every chunk goes to the recorder. If a client is attached, the chunk is also forwarded to it.
 
-**Client (`blackbox/client.py`)**: reads your keyboard, translates Windows scan codes to VT sequences (arrows, Home/End, Delete, ...), sends them to the server, and writes the server's output straight to your console. Your terminal does the ANSI rendering; the client never strips escape codes.
+**Client ([`blackbox/client.py`](blackbox/client.py)):** Reads keyboard input, translates Windows scan codes to VT sequences (arrows, Home/End, Delete, and others), sends it to the server, and writes the server's output directly to the console. The terminal performs the ANSI rendering; the client does not strip color or cursor escape sequences.
 
-**Recorder (`blackbox/recorder.py`)**: keeps the newest chunks in a ring buffer (`collections.deque`) and feeds the same stream into a [`pyte`](https://github.com/selectel/pyte) virtual screen. Logs are rewritten atomically (temp file + `os.replace`) every few seconds and on shutdown, so a crash never leaves a corrupt file.
+**Recorder ([`blackbox/recorder.py`](blackbox/recorder.py)):** Keeps the newest chunks in a ring buffer (`collections.deque`) and feeds the same stream into a [`pyte`](https://github.com/selectel/pyte) virtual screen. Logs are rewritten atomically (temporary file plus `os.replace`) every few seconds and during shutdown, reducing the risk of corrupt output after a crash.
 
-**Protocol (`blackbox/protocol.py`)**: 4-byte big-endian length header followed by a UTF-8 JSON body, with a 10 MB size cap.
+**Protocol ([`blackbox/protocol.py`](blackbox/protocol.py)):** Uses a 4-byte big-endian length header followed by a UTF-8 JSON body, with a 10 MB size limit.
 
 | Direction | `type` | Fields | Purpose |
 |---|---|---|---|
-| client → server | `auth` | `token` | First message; the connection is dropped if it is wrong |
+| client → server | `auth` | `token` | First message; the connection is dropped if the token is wrong |
 | client → server | `input` | `data` | Keystrokes for the shell |
-| client → server | `resize` | `rows`, `cols` | Terminal size; the first one triggers a screen repaint |
+| client → server | `resize` | `rows`, `cols` | Terminal size; the first resize triggers a screen repaint |
 | client → server | `ping` | | Keep-alive |
 | server → client | `output` | `data` | Raw terminal output |
 | server → client | `status` | `data` | Notices such as "Shell exited." |
@@ -61,41 +61,41 @@ A crash-resilient terminal flight recorder for Windows. A background daemon owns
 ## Installation
 
 ```powershell
-git clone https://github.com/YourUsername/TerminalBlackBox.git
-cd TerminalBlackBox
+git clone https://github.com/Nooby-Sandwich/term-blackbox.git
+cd term-blackbox
 python -m venv .venv
-.venv\Scripts\activate
-pip install -r requirements.txt
+.venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
 ```
 
-Register the background task. Run this **once** from an elevated PowerShell if you get "access denied". The task itself runs with normal user rights.
+Register the background task once. Run it from an elevated PowerShell if Windows reports "access denied"; the installed task itself runs with normal user privileges.
 
 ```powershell
 python tools/install_daemon.py
 ```
 
-The installer creates a per-user Task Scheduler task that starts at logon, restarts on failure, and is not stopped on battery power or after 72 hours.
+The installer creates a per-user Task Scheduler task that starts at logon, restarts on failure, and remains active on battery power and beyond 72 hours.
 
 ## Usage
 
-Start the daemon now (or just log in again):
+Start the daemon now (or wait until the next logon):
 
 ```powershell
 schtasks /run /tn TerminalBlackBoxDaemon
 ```
 
-Give it a couple of seconds to start, then attach:
+Give the daemon a few seconds to start, then attach:
 
 ```powershell
 python -m blackbox.client
 ```
 
-Use PowerShell normally: history, colors and window resizing all work.
+Use PowerShell normally: command history, colors, and terminal resizing are supported.
 
 | Key | Action |
 |---|---|
-| `Ctrl+C` | **Detach.** The shell keeps running in the background. It is *not* sent to the shell. |
-| `exit` (in the shell) | Ends the shell, which stops the daemon |
+| `Ctrl+C` | **Detach.** The shell keeps running in the background. It is not sent to the shell. |
+| `exit` | Ends the shell and stops the daemon |
 
 To run the server in a visible window for debugging:
 
@@ -103,57 +103,82 @@ To run the server in a visible window for debugging:
 python -m blackbox.server
 ```
 
-## Logs and replay
+## Logs and Replay
 
-Each daemon run writes `logs/blackbox_<YYYYmmdd_HHMMSS>.jsonl`, one JSON object per line:
+Each daemon run writes `logs/blackbox_<YYYYmmdd_HHMMSS>.jsonl`, with one JSON object per line:
 
 ```json
 {"type": "output", "timestamp": 1795523764.36, "data": "PS C:\\Users\\you> "}
 {"type": "screen", "timestamp": 1795523790.01, "lines": ["PS C:\\Users\\you> dir", "..."]}
 ```
 
-- `output`: a raw chunk from the PTY, ANSI sequences included. Only the newest `BUFFER_SIZE` chunks are kept.
-- `screen`: one final snapshot of the pyte virtual screen, as plain text.
+- `output`: A raw chunk from the PTY, including ANSI sequences. Only the newest `BUFFER_SIZE` chunks are retained.
+- `screen`: A final snapshot of the pyte virtual screen, represented as plain text.
 
-To see what the terminal looked like in the most recent log:
+Print the latest log's final screen state:
 
 ```powershell
 python tools/replay.py
 ```
 
+List available logs or replay one in real time:
+
+```powershell
+# List logs newest first
+python tools/replay.py --list
+
+# Replay the newest log at original timing
+python tools/replay.py --live
+
+# Replay a specific log twice as fast
+python tools/replay.py --live path\to\blackbox.jsonl --speed 2.0
+```
+
+## Testing
+
+The project uses `pytest` for protocol, recorder, and replay coverage.
+
+```powershell
+python -m pip install pytest
+python -m pytest
+```
+
+**32 tests pass.** The suite covers fragmented TCP delivery, concurrent ring-buffer writes, ANSI handshake filtering, replay behavior, and CLI arguments.
+
 ## Configuration
 
-These constants live at the top of the modules:
+These constants are declared in the source modules:
 
 | Constant | File | Default | Meaning |
 |---|---|---|---|
 | `HOST`, `PORT` | `server.py` | `127.0.0.1`, `9999` | Listen address |
-| `SHELL` | `server.py` | `powershell.exe` | Program to run in the PTY |
-| `AUTOSAVE_INTERVAL` | `server.py` | `5.0` s | How often the log is rewritten |
-| `BUFFER_SIZE` | `recorder.py` | `1000` | Output chunks kept in the ring buffer |
+| `SHELL` | `server.py` | `powershell.exe` | Program launched inside the PTY |
+| `AUTOSAVE_INTERVAL` | `server.py` | `5.0` seconds | How often the log is rewritten |
+| `BUFFER_SIZE` | `recorder.py` | `1000` | Number of output chunks retained |
 
-## Security notes
+## Security Notes
 
-- The server only listens on `127.0.0.1` and requires a random token, stored in `%LOCALAPPDATA%\term-blackbox\secret.txt` and compared in constant time.
-- **This is not a sandbox.** Any program running as *your* user can read the token and get a shell as you. Do not run the daemon elevated.
-- **Logs are plain text.** They contain everything the shell printed: command output, paths, and any secret that appears on screen. Keep `logs/` out of version control and out of cloud sync folders.
+- The server listens only on `127.0.0.1` and requires a random token stored in `%LOCALAPPDATA%\term-blackbox\secret.txt`. Authentication comparisons use `hmac.compare_digest`.
+- **This is not a sandbox.** Any program running as your Windows user can read the token and obtain a shell with that user's privileges. Do not run the daemon elevated.
+- **Logs are plain text.** They contain command output, paths, and anything else that appears on screen. Keep `logs/` out of source control and cloud-synchronized folders.
 
 ## Troubleshooting
 
 **`Could not connect. Is the server running?`**
 
-1. Wait a few seconds after `schtasks /run`, since the daemon needs time to start.
-2. Check that it launched:
+1. Wait a few seconds after `schtasks /run`; the daemon needs time to start.
+2. Check the Task Scheduler state:
    ```powershell
-   Get-ScheduledTaskInfo -TaskName TerminalBlackBoxDaemon | Select LastRunTime, LastTaskResult
+   Get-ScheduledTaskInfo -TaskName TerminalBlackBoxDaemon |
+       Select-Object LastRunTime, LastTaskResult
    Get-Process pythonw -ErrorAction SilentlyContinue
    ```
-   `LastTaskResult` of `0` means it launched. `267009` means it is still running.
-3. Run `python -m blackbox.server` in a visible window to see any traceback. Under `pythonw` there is no console, so errors are otherwise invisible.
+   `LastTaskResult` of `0` means the launch succeeded. `267009` means the task is already running.
+3. Run `python -m blackbox.server` in a visible window to see tracebacks. When running under `pythonw`, console output is redirected to the server log instead.
 
-**Screen looks offset or garbled after attaching.** Clear the terminal (`cls`) and attach again. The client clears the screen on connect so the server's cursor positions line up.
+**The screen looks offset or garbled after attaching.** Run `cls` and attach again. The client clears the terminal on connect so the server's absolute cursor positions can align.
 
-**Backspace misbehaves.** The client sends `\x7f` for Backspace. Some ConPTY builds prefer `\x08`; change it in `send_loop`.
+**Backspace misbehaves.** The client sends `\x7f` for Backspace. Some ConPTY builds prefer `\x08`; change the Backspace branch in `send_loop`.
 
 ## Uninstall
 
@@ -161,9 +186,9 @@ These constants live at the top of the modules:
 python tools/uninstall_daemon.py
 ```
 
-If the daemon is still running afterwards, stop it with `Stop-Process -Name pythonw`.
+If the daemon is still running, stop the specific Python process through Task Manager or close it from PowerShell after confirming the process belongs to Terminal Black Box.
 
-## Project structure
+## Project Structure
 
 ```text
 TerminalBlackBox/
@@ -176,7 +201,8 @@ TerminalBlackBox/
 │   ├── install_daemon.py
 │   ├── uninstall_daemon.py
 │   └── replay.py        # Log replay
-├── logs/                # Session logs (git-ignored)
+├── test/                # Pytest suite
+├── logs/                # Session logs
 ├── main.py              # CLI entry point
 └── requirements.txt
 ```
@@ -184,14 +210,12 @@ TerminalBlackBox/
 ## Limitations
 
 - One client at a time; a new connection replaces the old one.
-- The shell is shared state: if you type `exit`, the daemon stops too.
-- Reattaching repaints the screen as plain text, so colors from before the attach are not restored until the shell redraws.
-- The log is a rolling window of recent output, not a full session history.
+- The shell has shared state: typing `exit` stops the daemon too.
+- Reattaching repaints the screen as plain text, so colors from before the attach are restored only when the shell redraws them.
+- The log is a rolling window of recent output, not a complete session history.
 
 ## Roadmap
 
-- Byte-bounded buffer (for example a 50 MB cap) instead of a fixed chunk count
-- Timed replay controls (`--speed`, pause/resume)
-- Secret redaction before logs are written
-- Optional `AF_UNIX` socket in place of TCP
-- Protocol tests using `socket.socketpair()`
+- Byte-bounded buffering, such as a 50 MB cap, instead of a fixed chunk count
+- Secret redaction before log entries are written
+- Optional `AF_UNIX` socket support in place of TCP
