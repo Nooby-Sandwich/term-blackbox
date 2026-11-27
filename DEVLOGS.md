@@ -122,3 +122,10 @@
 - **The Single PTY Architecture**: Refactored the server to spawn the PTY only *once* at startup. Clients attach and detach dynamically. The server maintains the `pyte` virtual screen in memory, so when a client reconnects, the server repaints the current screen state immediately.
 - **Concurrency & Framing**: Implemented a `ClientSlot` class with a `threading.Lock` to ensure that the PTY reader thread and the client message loop don't interleave socket writes and corrupt the length-prefixed JSON protocol.
 - **Seamless Reattachment**: The client now sends a resize event on connection. The server uses this as a trigger to repaint the `pyte` screen buffer, meaning the prompt appears instantly without waiting for new output.
+
+### Next Steps (Project Finalization)
+- **Remove NSSM**: Delete the old `TerminalBlackBox` service.
+- **Task Scheduler**: Create a Task Scheduler job that runs `pythonw.exe -m blackbox.server` at user logon so the daemon runs invisibly and automatically.
+- **Log Viewer Tool (`tools/view_logs.py`)**: Write a utility that parses the `.jsonl` file and prints the final `{"type": "screen"}` snapshot so the user can see exactly what was on the screen before a crash.
+- **Code Documentation**: Thoroughly read and add docstrings to `server.py`, `client.py`, and `protocol.py` for interview readiness.
+
