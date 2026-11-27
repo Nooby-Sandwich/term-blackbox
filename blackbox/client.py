@@ -1,6 +1,7 @@
 import ctypes
 import msvcrt
 import os
+import re
 import shutil
 import socket
 import sys
@@ -9,6 +10,10 @@ import time
 
 from .protocol import send_message, recv_message
 from .server import TOKEN_FILE, HOST, PORT
+
+
+HANDSHAKE = re.compile(r"\x1b\[(?:\?(?:1004|9001)[hl]|[>=]?\d*c|[\d;]*t|[56]n)")
+
 
 # Windows scan codes to VT100 sequences (arrow keys, etc.)
 EXTENDED_KEYS = {
@@ -58,7 +63,7 @@ def receive_loop(sock):
                 break
             kind = msg.get("type")
             if kind == "output":
-                sys.stdout.write(msg["data"])
+                sys.stdout.write(HANDSHAKE.sub("", msg["data"]))
                 sys.stdout.flush()
             elif kind == "status" and "exited" in msg.get("data", ""):
                 print(f"\n[Server] {msg['data']}")
