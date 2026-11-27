@@ -129,3 +129,16 @@
 - **Log Viewer Tool (`tools/view_logs.py`)**: Write a utility that parses the `.jsonl` file and prints the final `{"type": "screen"}` snapshot so the user can see exactly what was on the screen before a crash.
 - **Code Documentation**: Thoroughly read and add docstrings to `server.py`, `client.py`, and `protocol.py` for interview readiness.
 
+## Session 5: Daemonization, Replay, & Final Polish
+**Date:** November 27, 2026
+
+### What We Built
+- **Task Scheduler Automation**: Abandoned NSSM due to Session 0 isolation. Created `tools/install_daemon.py` which uses `Register-ScheduledTask` to run the server invisibly at user logon using `pythonw.exe`, bypassing UAC elevation.
+- **Crash Logging**: Redirected `sys.stdout` and `sys.stderr` to `server.log` for headless debugging.
+- **The Replay Tool (`tools/replay.py`)**: Rewrote the playback tool to feed the `.jsonl` logs into the `pyte` virtual screen, rendering a perfect, readable snapshot of the terminal state at the time of a crash.
+- **Resolved Socket Errors**: Identified that `WinError 10053` during client detach is a benign artifact of terminating the socket without a TCP FIN packet.
+
+### Next Steps
+- **Log Viewing (`tools/replay.py`)**: Expand the replay tool into a proper log viewer with timed playback controls (`--speed`), pause/resume, and the ability to list available logs.
+- **Code Documentation**: Thoroughly read through `client.py`, `server.py`, and `protocol.py`, adding detailed docstrings and inline comments to ensure every line can be explained in a technical interview.
+- **Unit Testing**: Write `pytest` tests for the custom `protocol.py` to verify message framing and connection dropping.

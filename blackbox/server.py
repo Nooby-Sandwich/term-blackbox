@@ -8,6 +8,7 @@ import hmac
 import os
 import secrets
 import socket
+import sys
 import threading
 import time
 from winpty import PtyProcess
@@ -162,6 +163,12 @@ def serve_client(conn, proc, box, slot, token):
 
 
 def start_server():
+
+    # Redirect standard output to a log file if running headless (via pythonw)
+    if sys.stdout is None or sys.stderr is None:
+        log_path = os.path.join(os.path.dirname(TOKEN_FILE), "server.log")
+        sys.stdout = sys.stderr = open(log_path, "a", buffering=1, encoding="utf-8")
+
     token = generate_token()
     rows, cols = DEFAULT_SIZE
     box = BlackBox(rows, cols)
