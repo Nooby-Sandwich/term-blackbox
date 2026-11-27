@@ -2,7 +2,8 @@ import json
 import os
 import sys
 
-import replay  # tools/replay.py (see pythonpath in pytest.ini)
+from tools import replay
+# import replay  # tools/replay.py (see pythonpath in pytest.ini)
 
 
 def write_log(path, entries, tail=""):
